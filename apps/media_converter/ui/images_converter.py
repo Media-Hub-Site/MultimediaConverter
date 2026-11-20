@@ -21,7 +21,7 @@ from apps.media_converter.ui.ui_theme import (
     make_card_container,
 )
 
-IMAGE_FORMATS = ["png", "jpg", "webp", "ico", "bmp"]
+IMAGE_FORMATS = ["png", "jpg", "webp", "jfif", "ico", "bmp", "tiff", "gif"]
 
 
 class ImageDropLabel(QLabel):
@@ -34,7 +34,7 @@ class ImageDropLabel(QLabel):
         self.setAcceptDrops(True)
         self.image_path = None
         self.on_image_dropped = on_image_dropped
-        self.allowed_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.webp', '.ico')
+        self.allowed_extensions = ('.png', '.jpg', '.jpeg', '.jfif', '.bmp', '.webp', '.ico', '.tiff', '.tif', '.gif')
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -180,7 +180,12 @@ class ImageConverter(QWidget):
 
     def select_image(self):
         file_dialog = QFileDialog()
-        file_paths, _ = file_dialog.getOpenFileNames(self, "Seleccionar Imágenes", "", "Imágenes (*.png *.jpg *.jpeg *.bmp *.webp *.ico)")
+        file_paths, _ = file_dialog.getOpenFileNames(
+            self,
+            "Seleccionar Imágenes",
+            "",
+            "Imágenes (*.png *.jpg *.jpeg *.jfif *.bmp *.webp *.ico *.tiff *.tif *.gif);;Todos los archivos (*.*)"
+        )
         if file_paths:
             self.image_path = None
             for fp in file_paths:
@@ -200,12 +205,15 @@ class ImageConverter(QWidget):
             return
         if len(self.batch_files) == 1:
             fp = self.batch_files[0]
+            self.image_path = fp
             self.image_label.clear()
             pixmap = QPixmap(fp)
             self.image_label.setPixmap(pixmap.scaled(250, 250, Qt.AspectRatioMode.KeepAspectRatio))
             ext = os.path.splitext(fp)[1].lstrip('.').lower()
             if ext == 'jpeg':
                 ext = 'jpg'
+            elif ext == 'tif':
+                ext = 'tiff'
             if ext in IMAGE_FORMATS:
                 idx = self.from_combo.findText(ext)
                 if idx != -1:
@@ -214,7 +222,14 @@ class ImageConverter(QWidget):
                 dests = [f for f in IMAGE_FORMATS if f != ext]
                 self.to_combo.clear()
                 self.to_combo.addItems(dests)
+            else:
+                self.from_combo.clear()
+                self.from_combo.addItem(ext if ext else "desconocido")
+                self.from_combo.setEnabled(False)
+                self.to_combo.clear()
+                self.to_combo.addItems(IMAGE_FORMATS)
         else:
+            self.image_path = None
             self.image_label.clear()
             self.image_label.setText(f"{len(self.batch_files)} imágenes seleccionadas")
             self.from_combo.clear()
@@ -228,7 +243,7 @@ class ImageConverter(QWidget):
         folder_path = QFileDialog.getExistingDirectory(self, "Seleccionar Carpeta de Imágenes")
         if not folder_path:
             return
-        valid_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".ico"}
+        valid_exts = {".png", ".jpg", ".jpeg", ".jfif", ".webp", ".bmp", ".ico", ".tiff", ".tif", ".gif"}
         self.image_path = None
         for name in os.listdir(folder_path):
             file_path = os.path.join(folder_path, name)
@@ -295,6 +310,8 @@ class ImageConverter(QWidget):
                     from_format = os.path.splitext(file_path)[1].lstrip(".").lower()
                     if from_format == "jpeg":
                         from_format = "jpg"
+                    elif from_format == "tif":
+                        from_format = "tiff"
                     if from_format == to_format:
                         skipped += 1
                     else:

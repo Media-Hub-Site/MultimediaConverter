@@ -83,7 +83,7 @@ class ResultViewerDialog(QDialog):
             thumb_label.setStyleSheet("background-color: #2a2a2a; border-radius: 8px;")
 
             # Generate Thumbnail
-            if ext in ['.jpg', '.jpeg', '.png', '.webp', '.bmp']:
+            if ext in ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.jfif', '.tiff', '.tif', '.gif', '.ico']:
                 pixmap = QPixmap(file_path)
                 if not pixmap.isNull():
                     thumb_label.setPixmap(pixmap.scaled(110, 110, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))

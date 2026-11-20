@@ -99,7 +99,7 @@ def _find_ffmpeg() -> str | None:
 
 
 class ImageFormats:
-    formatos_imagen = ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'tiff', 'gif', 'ico']
+    formatos_imagen = ['png', 'jpg', 'jpeg', 'jfif', 'webp', 'bmp', 'tiff', 'tif', 'gif', 'ico']
 
     @staticmethod
     def _open_image(ruta_origen):
@@ -110,7 +110,7 @@ class ImageFormats:
         ruta_destino = _prepare_dest(ruta_destino)
         formato_lower = formato.lower()
 
-        if formato_lower in ('jpg', 'jpeg'):
+        if formato_lower in ('jpg', 'jpeg', 'jfif'):
             if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
                 fondo = Image.new('RGB', img.size, (255, 255, 255))
                 fondo.paste(img.convert('RGBA'), mask=img.convert('RGBA').split()[-1])
@@ -129,6 +129,20 @@ class ImageFormats:
                 img = img.convert('RGBA')
             # Ensure it fits max standard ico size, but PIL handles standard resizing or saves as is.
             img.save(ruta_destino, format='ICO')
+        elif formato_lower in ('tiff', 'tif'):
+            if img.mode == 'RGBA':
+                img.save(ruta_destino, format='TIFF')
+            else:
+                img.convert('RGB').save(ruta_destino, format='TIFF')
+        elif formato_lower == 'gif':
+            img.save(ruta_destino, format='GIF')
+        elif formato_lower == 'bmp':
+            if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
+                fondo = Image.new('RGB', img.size, (255, 255, 255))
+                fondo.paste(img.convert('RGBA'), mask=img.convert('RGBA').split()[-1])
+                fondo.save(ruta_destino, format='BMP')
+            else:
+                img.convert('RGB').save(ruta_destino, format='BMP')
         else:
             try:
                 img.save(ruta_destino, formato.upper())

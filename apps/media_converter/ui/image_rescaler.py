@@ -31,7 +31,7 @@ class ImageDropLabel(QLabel):
         self.setAcceptDrops(True)
         self.image_path = None
         self.on_image_dropped = on_image_dropped
-        self.allowed_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.webp', '.tiff', '.gif', '.ico')
+        self.allowed_extensions = ('.png', '.jpg', '.jpeg', '.jfif', '.bmp', '.webp', '.tiff', '.tif', '.gif', '.ico')
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -266,7 +266,12 @@ class ImageRescaler(QWidget):
 
     def select_image(self):
         file_dialog = QFileDialog()
-        file_paths, _ = file_dialog.getOpenFileNames(self, "Seleccionar Imágenes", "", "Imágenes (*.png *.jpg *.jpeg *.bmp *.webp *.tiff)")
+        file_paths, _ = file_dialog.getOpenFileNames(
+            self,
+            "Seleccionar Imágenes",
+            "",
+            "Imágenes (*.png *.jpg *.jpeg *.jfif *.bmp *.webp *.tiff *.tif *.gif *.ico);;Todos los archivos (*.*)"
+        )
         if file_paths:
             self.image_path = None
             for fp in file_paths:
@@ -301,7 +306,7 @@ class ImageRescaler(QWidget):
         folder_path = QFileDialog.getExistingDirectory(self, "Seleccionar Carpeta de Imágenes")
         if not folder_path:
             return
-        valid_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
+        valid_exts = {".png", ".jpg", ".jpeg", ".jfif", ".webp", ".bmp", ".tiff", ".tif", ".gif", ".ico"}
         self.image_path = None
         for name in os.listdir(folder_path):
             file_path = os.path.join(folder_path, name)
