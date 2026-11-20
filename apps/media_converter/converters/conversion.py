@@ -378,14 +378,19 @@ class AudioFormats:
         import subprocess
         if extra_args is None:
             extra_args = []
+        ruta_origen = os.path.abspath(ruta_origen)
         ruta_destino = _prepare_dest(ruta_destino)
         ffmpeg_path = _find_ffmpeg()
         if not ffmpeg_path:
             return False, '❌ ffmpeg no está disponible. Añádelo a PATH o define la variable de entorno FFMPEG_PATH apuntando al ejecutable.'
         cmd = [ffmpeg_path, '-y', '-i', ruta_origen] + extra_args + [ruta_destino]
+        startupinfo = None
+        if os.name == 'nt':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         try:
-            repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, cwd=repo_root)
+            repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, cwd=repo_root, startupinfo=startupinfo)
             return True, f"✅ Convertido: {os.path.basename(ruta_origen)} -> {os.path.basename(ruta_destino)}"
         except subprocess.CalledProcessError as e:
             stderr = e.stderr.decode(errors='replace') if isinstance(e.stderr, (bytes, bytearray)) else str(e.stderr)
@@ -426,14 +431,19 @@ class VideoFormats:
         import subprocess
         if extra_args is None:
             extra_args = []
+        ruta_origen = os.path.abspath(ruta_origen)
         ruta_destino = _prepare_dest(ruta_destino)
         ffmpeg_path = _find_ffmpeg()
         if not ffmpeg_path:
             return False, '❌ ffmpeg no está disponible. Añádelo a PATH o define la variable de entorno FFMPEG_PATH apuntando al ejecutable.'
         cmd = [ffmpeg_path, '-y', '-i', ruta_origen] + extra_args + [ruta_destino]
+        startupinfo = None
+        if os.name == 'nt':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         try:
-            repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, cwd=repo_root)
+            repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, cwd=repo_root, startupinfo=startupinfo)
             return True, f"✅ Convertido: {os.path.basename(ruta_origen)} -> {os.path.basename(ruta_destino)}"
         except subprocess.CalledProcessError as e:
             stderr = e.stderr.decode(errors='replace') if isinstance(e.stderr, (bytes, bytearray)) else str(e.stderr)

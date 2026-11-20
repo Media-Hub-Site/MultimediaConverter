@@ -10,6 +10,8 @@ hidden_imports = [
     'PyQt6.QtCore',
     'PyQt6.QtGui',
     'PyQt6.QtWidgets',
+    'PyQt6.QtMultimedia',
+    'PyQt6.QtMultimediaWidgets',
     'PIL',
     'cv2',
     'numpy',

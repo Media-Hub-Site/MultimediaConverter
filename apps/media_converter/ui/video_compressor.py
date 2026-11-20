@@ -19,29 +19,57 @@ from apps.media_converter.converters.conversion import _find_ffmpeg
 
 
 def _get_video_info(file_path: str, ffmpeg_path: str) -> dict:
-    """Extrae duración (s) y tasa de bits usando ffprobe o ffmpeg."""
+    """Extrae duración (s), resolución y tamaño usando ffprobe o ffmpeg -i."""
     ffprobe_path = ffmpeg_path.replace("ffmpeg.exe", "ffprobe.exe").replace("ffmpeg", "ffprobe")
+    duration = 0.0
+    width = 0
+    height = 0
+    size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+
+    startupinfo = None
+    if os.name == "nt":
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+
     if os.path.exists(ffprobe_path):
         try:
             cmd = [
                 ffprobe_path, "-v", "quiet", "-print_format", "json",
                 "-show_format", "-show_streams", file_path
             ]
-            startupinfo = None
-            if os.name == "nt":
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             res = subprocess.run(cmd, capture_output=True, text=True, startupinfo=startupinfo)
             if res.returncode == 0:
                 data = json.loads(res.stdout)
                 duration = float(data.get("format", {}).get("duration", 0))
-                size = float(data.get("format", {}).get("size", os.path.getsize(file_path)))
-                return {"duration": duration, "size": size}
+                size = float(data.get("format", {}).get("size", size))
+                for stream in data.get("streams", []):
+                    if stream.get("codec_type") == "video":
+                        width = int(stream.get("width", 0))
+                        height = int(stream.get("height", 0))
+                        break
+                if duration > 0:
+                    return {"duration": duration, "size": size, "width": width, "height": height}
         except Exception:
             pass
 
-    # Fallback básico leyendo tamaño de archivo
-    return {"duration": 0, "size": os.path.getsize(file_path)}
+    # Fallback con ffmpeg -i leyendo stderr
+    try:
+        import re
+        cmd = [ffmpeg_path, "-i", file_path]
+        res = subprocess.run(cmd, capture_output=True, text=True, startupinfo=startupinfo)
+        m_dur = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)", res.stderr)
+        if m_dur:
+            h, m, s = m_dur.groups()
+            duration = int(h) * 3600 + int(m) * 60 + float(s)
+
+        m_dim = re.search(r"Stream.*Video:.*,\s*(\d{2,5})x(\d{2,5})", res.stderr)
+        if m_dim:
+            width = int(m_dim.group(1))
+            height = int(m_dim.group(2))
+    except Exception:
+        pass
+
+    return {"duration": duration, "size": size, "width": width, "height": height}
 
 
 class VideoCompressThread(QThread):
@@ -49,13 +77,14 @@ class VideoCompressThread(QThread):
     finished_success = pyqtSignal(str)
     error = pyqtSignal(str)
 
-    def __init__(self, input_path, output_path, mode, target_mb, crf_value):
+    def __init__(self, input_path, output_path, mode, target_mb, crf_value, target_res="original"):
         super().__init__()
         self.input_path = input_path
         self.output_path = output_path
-        self.mode = mode  # "target_size" o "crf"
+        self.mode = mode  # "target_size", "crf", or "percentage"
         self.target_mb = target_mb
         self.crf_value = crf_value
+        self.target_res = target_res
 
     def run(self):
         try:
@@ -67,25 +96,39 @@ class VideoCompressThread(QThread):
             self.progress.emit(10, "Analizando video...")
             info = _get_video_info(self.input_path, ffmpeg_path)
             duration = info.get("duration", 0)
+            orig_size = info.get("size", 0)
 
             startupinfo = None
             if os.name == "nt":
                 startupinfo = subprocess.STARTUPINFO()
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
+            vf_filters = []
+            if self.target_res == "720p":
+                vf_filters.append("scale=-2:'min(720,ih)'")
+            elif self.target_res == "480p":
+                vf_filters.append("scale=-2:'min(480,ih)'")
+            elif self.target_res == "360p":
+                vf_filters.append("scale=-2:'min(360,ih)'")
+
             if self.mode == "target_size" and duration > 0:
                 # Cálculo de bitrate objetivo: Total bits = target_MB * 8192 kbits
-                # Bitrate total (kbps) = (target_MB * 8192) / duration
                 total_kbits = self.target_mb * 8192
                 target_total_bitrate = int(total_kbits / duration)
-                audio_bitrate = 128  # kbps
-                video_bitrate = max(target_total_bitrate - audio_bitrate, 100)
+                audio_bitrate = min(128, max(48, int(target_total_bitrate * 0.15)))
+                video_bitrate = max(target_total_bitrate - audio_bitrate, 64)
 
                 self.progress.emit(30, "Comprimiendo video al tamaño seleccionado...")
                 cmd = [
                     ffmpeg_path, "-y", "-i", self.input_path,
                     "-c:v", "libx264", "-b:v", f"{video_bitrate}k",
+                    "-maxrate", f"{int(video_bitrate * 1.4)}k",
+                    "-bufsize", f"{int(video_bitrate * 2)}k",
                     "-preset", "faster",
+                ]
+                if vf_filters:
+                    cmd += ["-vf", ",".join(vf_filters)]
+                cmd += [
                     "-c:a", "aac", "-b:a", f"{audio_bitrate}k",
                     self.output_path
                 ]
@@ -96,6 +139,10 @@ class VideoCompressThread(QThread):
                     ffmpeg_path, "-y", "-i", self.input_path,
                     "-c:v", "libx264", "-crf", str(self.crf_value),
                     "-preset", "faster",
+                ]
+                if vf_filters:
+                    cmd += ["-vf", ",".join(vf_filters)]
+                cmd += [
                     "-c:a", "aac", "-b:a", "128k",
                     self.output_path
                 ]
@@ -145,9 +192,9 @@ class VideoCompressorUI(QWidget):
         self.drop_zone.setFixedHeight(140)
         self.drop_zone.setStyleSheet(f"""
             QFrame {{
-                background-color: {self._colors['bg']};
+                background-color: {self._colors['card']};
                 border: 2px dashed {self._colors['border']};
-                border-radius: 14px;
+                border-radius: 12px;
             }}
             QFrame:hover {{
                 border-color: {self._colors['accent']};
@@ -175,8 +222,16 @@ class VideoCompressorUI(QWidget):
 
         # Opciones de Compresión
         opts_box = QFrame()
-        opts_box.setStyleSheet(f"background-color: {self._colors['bg']}; border-radius: 12px; padding: 10px;")
+        opts_box.setStyleSheet(f"""
+            QFrame {{
+                background-color: {self._colors['card']};
+                border: 1px solid {self._colors['border']};
+                border-radius: 10px;
+                padding: 12px;
+            }}
+        """)
         opts_layout = QVBoxLayout(opts_box)
+        opts_layout.setContentsMargins(12, 10, 12, 10)
         opts_layout.setSpacing(12)
 
         lbl_opts = QLabel("Método de compresión:")
@@ -232,7 +287,8 @@ class VideoCompressorUI(QWidget):
         self.combo_crf.addItems([
             "Ligera (Mejor calidad - CRF 22)",
             "Media (Recomendada - CRF 28)",
-            "Agresiva (Máximo ahorro de espacio - CRF 32)"
+            "Agresiva (Máximo ahorro de espacio - CRF 32)",
+            "Extrema (Máxima compresión - CRF 36)"
         ])
         self.combo_crf.setCurrentIndex(1)
 
@@ -240,6 +296,28 @@ class VideoCompressorUI(QWidget):
         crf_row.addWidget(self.combo_crf)
         crf_row.addStretch()
         opts_layout.addLayout(crf_row)
+
+        # Agrupar radio buttons de métodos
+        self.mode_group = QButtonGroup(self)
+        self.mode_group.addButton(self.radio_target)
+        self.mode_group.addButton(self.radio_crf)
+
+        # Ajuste de resolución opcional
+        res_row = QHBoxLayout()
+        lbl_res = QLabel("Reducir resolución (opcional):")
+        lbl_res.setStyleSheet(f"color: {self._colors['text_muted']}; font-weight: 600;")
+        self.combo_res = QComboBox()
+        self.combo_res.setStyleSheet(get_combo_style())
+        self.combo_res.addItems([
+            "Mantener resolución original",
+            "Escalar a 720p HD (Máx 720p)",
+            "Escalar a 480p SD (Ahorro notable)",
+            "Escalar a 360p Móvil (Máximo ahorro)"
+        ])
+        res_row.addWidget(lbl_res)
+        res_row.addWidget(self.combo_res)
+        res_row.addStretch()
+        opts_layout.addLayout(res_row)
 
         card_layout.addWidget(opts_box)
         card_layout.addSpacing(10)
@@ -348,8 +426,11 @@ class VideoCompressorUI(QWidget):
 
         mode = "target_size" if self.radio_target.isChecked() else "crf"
         target_mb = self.spin_target_mb.value()
-        crf_map = {0: 22, 1: 28, 2: 32}
+        crf_map = {0: 22, 1: 28, 2: 32, 3: 36}
         crf_val = crf_map.get(self.combo_crf.currentIndex(), 28)
+        
+        res_map = {0: "original", 1: "720p", 2: "480p", 3: "360p"}
+        target_res = res_map.get(self.combo_res.currentIndex(), "original")
 
         self.btn_compress.setEnabled(False)
         self.drop_zone.setEnabled(False)
@@ -357,7 +438,7 @@ class VideoCompressorUI(QWidget):
         self.progress_bar.setValue(10)
 
         self.worker = VideoCompressThread(
-            self.file_path, output_path, mode, target_mb, crf_val
+            self.file_path, output_path, mode, target_mb, crf_val, target_res
         )
         self.worker.progress.connect(self._on_progress)
         self.worker.finished_success.connect(self._on_success)

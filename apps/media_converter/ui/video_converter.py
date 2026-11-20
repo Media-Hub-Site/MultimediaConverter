@@ -119,12 +119,13 @@ class VideoConverter(QWidget):
 
         # ── Formato de origen ──
         from_row = QHBoxLayout()
+        from_row.setContentsMargins(6, 6, 6, 6)
         from_lbl = QLabel("Formato de origen:")
         self.from_combo = QComboBox()
         self.from_combo.addItems(VIDEO_FORMATS)
         self.from_combo.setEnabled(False)
         self.from_combo.setStyleSheet(get_combo_style())
-        from_lbl.setStyleSheet(f"color: {self._colors['text_muted']};")
+        from_lbl.setStyleSheet(f"color: {self._colors['text_muted']}; font-weight: 600; margin-right: 8px;")
         from_row.addWidget(from_lbl)
         from_row.addWidget(self.from_combo)
         from_row.addStretch()
@@ -132,8 +133,9 @@ class VideoConverter(QWidget):
 
         # ── Toggle: tipo de salida ──
         toggle_row = QHBoxLayout()
+        toggle_row.setContentsMargins(6, 6, 6, 6)
         dest_type_lbl = QLabel("Convertir a:")
-        dest_type_lbl.setStyleSheet(f"color: {self._colors['text_muted']};")
+        dest_type_lbl.setStyleSheet(f"color: {self._colors['text_muted']}; font-weight: 600; margin-right: 8px;")
         toggle_row.addWidget(dest_type_lbl)
         toggle_row.addSpacing(10)
 
@@ -154,11 +156,12 @@ class VideoConverter(QWidget):
 
         # ── Formato de destino ──
         to_row = QHBoxLayout()
+        to_row.setContentsMargins(6, 6, 6, 6)
         self.to_lbl = QLabel("Formato de video:")
         self.to_combo = QComboBox()
         self.to_combo.addItems(VIDEO_FORMATS)
         self.to_combo.setStyleSheet(get_combo_style())
-        self.to_lbl.setStyleSheet(f"color: {self._colors['text_muted']};")
+        self.to_lbl.setStyleSheet(f"color: {self._colors['text_muted']}; font-weight: 600; margin-right: 8px;")
         to_row.addWidget(self.to_lbl)
         to_row.addWidget(self.to_combo)
         to_row.addStretch()

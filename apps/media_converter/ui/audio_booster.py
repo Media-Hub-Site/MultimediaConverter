@@ -6,8 +6,9 @@ from PyQt6.QtWidgets import (
     QFileDialog, QProgressBar, QMessageBox, QFrame, QSlider,
     QCheckBox
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QUrl
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from apps.media_converter.ui.ui_theme import (
     get_app_colors,
@@ -57,7 +58,6 @@ class AudioBoostThread(QThread):
             is_video = ext.lower() in [".mp4", ".mkv", ".mov", ".avi", ".webm"]
 
             if is_video:
-                # Si es video, mantenemos el stream de video intacto (-c:v copy) y filtramos solo el audio
                 cmd = [
                     ffmpeg_path, "-y",
                     "-i", self.input_path,
@@ -88,38 +88,47 @@ class AudioBoostThread(QThread):
 
 
 class AudioBoosterUI(QWidget):
-    """Interfaz gráfica para amplificar y normalizar volumen de audio o video."""
+    """Interfaz gráfica para amplificar y normalizar volumen con reproducción en tiempo real."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._colors = get_app_colors()
         self.file_path = None
+
+        # Configuración de reproductor en tiempo real
+        self.player = QMediaPlayer()
+        self.audio_output = QAudioOutput()
+        self.player.setAudioOutput(self.audio_output)
+        # Inicializar al 100% de base
+        self.base_volume = 1.0
+        self.audio_output.setVolume(1.0)
+
         self.init_ui()
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(28, 20, 28, 24)
-        main_layout.setSpacing(16)
+        main_layout.setSpacing(14)
 
         card, card_layout = make_card_container()
 
-        header = QLabel("Amplificador de Volumen")
+        header = QLabel("Amplificador y Normalizador de Volumen")
         header.setStyleSheet(f"font-size: 19pt; font-weight: 800; color: {self._colors['text_main']};")
-        desc = QLabel("Sube el volumen de grabaciones bajas y normaliza niveles desiguales en audios y videos.")
+        desc = QLabel("Aumenta el volumen de videos o audios que suenan bajo, con vista previa y prueba de sonido en vivo.")
         desc.setStyleSheet(f"color: {self._colors['text_muted']}; font-size: 10.5pt;")
         card_layout.addWidget(header)
         card_layout.addWidget(desc)
-        card_layout.addSpacing(10)
+        card_layout.addSpacing(6)
 
         # Drop Zone
         self.drop_zone = QFrame()
         self.drop_zone.setAcceptDrops(True)
-        self.drop_zone.setFixedHeight(140)
+        self.drop_zone.setFixedHeight(115)
         self.drop_zone.setStyleSheet(f"""
             QFrame {{
-                background-color: {self._colors['bg']};
+                background-color: {self._colors['card']};
                 border: 2px dashed {self._colors['border']};
-                border-radius: 14px;
+                border-radius: 12px;
             }}
             QFrame:hover {{
                 border-color: {self._colors['accent']};
@@ -129,9 +138,9 @@ class AudioBoosterUI(QWidget):
         drop_layout = QVBoxLayout(self.drop_zone)
         drop_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.drop_label = QLabel("Arrastra un archivo de audio o video aquí")
+        self.drop_label = QLabel("Arrastra tu archivo de audio o video aquí o haz clic para seleccionar")
         self.drop_label.setStyleSheet(f"color: {self._colors['text_main']}; font-size: 11pt; font-weight: 600;")
-        self.file_info_label = QLabel("Soporta MP3, WAV, M4A, FLAC, MP4, MKV y más")
+        self.file_info_label = QLabel("Formatos compatibles: MP3, WAV, FLAC, M4A, OGG, AAC, MP4, MKV, MOV...")
         self.file_info_label.setStyleSheet(f"color: {self._colors['text_muted']}; font-size: 9pt;")
 
         drop_layout.addWidget(self.drop_label, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -142,13 +151,69 @@ class AudioBoosterUI(QWidget):
         self.drop_zone.dropEvent = self.drop_event
 
         card_layout.addWidget(self.drop_zone)
-        card_layout.addSpacing(8)
+        card_layout.addSpacing(6)
 
-        # Panel de Ajustes
+        # ── Controles de Reproducción y Preescucha en Vivo ──
+        preview_box = QFrame()
+        preview_box.setStyleSheet(f"""
+            QFrame {{
+                background-color: {self._colors['card']};
+                border: 1px solid {self._colors['border']};
+                border-radius: 10px;
+                padding: 8px 12px;
+            }}
+        """)
+        preview_layout = QHBoxLayout(preview_box)
+        preview_layout.setContentsMargins(10, 6, 10, 6)
+
+        self.btn_play_preview = QPushButton("▶ Escuchar en vivo")
+        self.btn_play_preview.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_play_preview.setFixedHeight(34)
+        self.btn_play_preview.setFixedWidth(160)
+        self.btn_play_preview.setEnabled(False)
+        self.btn_play_preview.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {self._colors['accent']};
+                color: #FFFFFF;
+                border-radius: 7px;
+                font-weight: 700;
+                font-size: 10pt;
+                border: none;
+            }}
+            QPushButton:hover {{
+                background-color: {self._colors['accent_hover']};
+            }}
+            QPushButton:disabled {{
+                background-color: {self._colors['border']};
+                color: {self._colors['text_muted']};
+            }}
+        """)
+        self.btn_play_preview.clicked.connect(self._toggle_preview)
+
+        lbl_live_hint = QLabel("💡 Reproduce y mueve el deslizador para escuchar la variación de volumen en tiempo real.")
+        lbl_live_hint.setStyleSheet(f"color: {self._colors['text_muted']}; font-size: 9.5pt; font-weight: 600;")
+
+        preview_layout.addWidget(self.btn_play_preview)
+        preview_layout.addSpacing(14)
+        preview_layout.addWidget(lbl_live_hint)
+        preview_layout.addStretch()
+
+        card_layout.addWidget(preview_box)
+        card_layout.addSpacing(6)
+
+        # ── Panel de Ajustes de Volumen ──
         opts_box = QFrame()
-        opts_box.setStyleSheet(f"background-color: {self._colors['bg']}; border-radius: 12px; padding: 14px;")
+        opts_box.setStyleSheet(f"""
+            QFrame {{
+                background-color: {self._colors['card']};
+                border: 1px solid {self._colors['border']};
+                border-radius: 10px;
+                padding: 12px;
+            }}
+        """)
         opts_layout = QVBoxLayout(opts_box)
-        opts_layout.setSpacing(12)
+        opts_layout.setContentsMargins(12, 10, 12, 10)
+        opts_layout.setSpacing(10)
 
         lbl_gain = QLabel("Multiplicador de Volumen:")
         lbl_gain.setStyleSheet(f"color: {self._colors['text_main']}; font-weight: 700; font-size: 10.5pt;")
@@ -160,7 +225,7 @@ class AudioBoosterUI(QWidget):
         self.slider.setValue(150)      # 150% (+50%)
         self.slider.setStyleSheet(f"""
             QSlider::groove:horizontal {{
-                background: {self._colors['card']};
+                background: {self._colors['border']};
                 height: 8px;
                 border-radius: 4px;
             }}
@@ -179,7 +244,7 @@ class AudioBoosterUI(QWidget):
         """)
 
         self.lbl_slider_val = QLabel("150% (+50%)")
-        self.lbl_slider_val.setFixedWidth(100)
+        self.lbl_slider_val.setFixedWidth(110)
         self.lbl_slider_val.setStyleSheet(f"color: {self._colors['text_main']}; font-weight: 700; font-size: 11pt;")
 
         self.slider.valueChanged.connect(self._on_slider_changed)
@@ -194,22 +259,22 @@ class AudioBoosterUI(QWidget):
         opts_layout.addWidget(self.chk_norm)
 
         card_layout.addWidget(opts_box)
-        card_layout.addSpacing(10)
+        card_layout.addSpacing(6)
 
         # Barra de progreso
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
-        self.progress_bar.setFixedHeight(12)
+        self.progress_bar.setFixedHeight(10)
         self.progress_bar.setTextVisible(False)
         self.progress_bar.setStyleSheet(f"""
             QProgressBar {{
-                background: {self._colors['bg']};
-                border-radius: 6px;
+                background: {self._colors['card']};
+                border-radius: 5px;
                 border: 1px solid {self._colors['border']};
             }}
             QProgressBar::chunk {{
                 background: {self._colors['accent']};
-                border-radius: 5px;
+                border-radius: 4px;
             }}
         """)
         card_layout.addWidget(self.progress_bar)
@@ -224,7 +289,7 @@ class AudioBoosterUI(QWidget):
 
         self.btn_boost = QPushButton("Aplicar y Guardar")
         self.btn_boost.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_boost.setFixedHeight(46)
+        self.btn_boost.setFixedHeight(44)
         self.btn_boost.setFixedWidth(220)
         self.btn_boost.setEnabled(False)
         self.btn_boost.setStyleSheet(f"""
@@ -251,11 +316,29 @@ class AudioBoosterUI(QWidget):
         card_layout.addLayout(bottom_layout)
         main_layout.addWidget(card)
 
+    def _toggle_preview(self):
+        if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self.player.pause()
+            self.btn_play_preview.setText("▶ Escuchar en vivo")
+        else:
+            self._apply_live_volume()
+            self.player.play()
+            self.btn_play_preview.setText("⏸ Pausar")
+
+    def _apply_live_volume(self):
+        """Aplica el multiplicador en tiempo real al AudioOutput de Qt."""
+        mult = self.slider.value() / 100.0
+        # QAudioOutput escala de 0.0 a 1.0 (o superior si el backend lo soporta)
+        # Para dar efecto audible en tiempo real:
+        clamped_vol = min(max(mult * 0.7, 0.05), 1.0)
+        self.audio_output.setVolume(clamped_vol)
+
     def _on_slider_changed(self, val):
         mult = val / 100.0
         diff = val - 100
         sign = "+" if diff > 0 else ""
         self.lbl_slider_val.setText(f"{val}% ({sign}{diff}%)")
+        self._apply_live_volume()
 
     def drag_enter_event(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
@@ -279,30 +362,41 @@ class AudioBoosterUI(QWidget):
         self.file_path = file_path
         name = os.path.basename(file_path)
         self.drop_label.setText(name)
-        self.file_info_label.setText("Listo para amplificar y normalizar volumen")
+        self.file_info_label.setText("Listo para amplificar y escuchar en vivo")
         self.btn_boost.setEnabled(True)
+        self.btn_play_preview.setEnabled(True)
         self.status_label.setText("")
+
+        self.player.stop()
+        self.player.setSource(QUrl.fromLocalFile(file_path))
+        self.btn_play_preview.setText("▶ Escuchar en vivo")
 
     def start_boost(self):
         if not self.file_path or not os.path.exists(self.file_path):
             return
 
+        self.player.pause()
+        self.btn_play_preview.setText("▶ Escuchar en vivo")
+
         base, ext = os.path.splitext(self.file_path)
         output_path, _ = QFileDialog.getSaveFileName(
-            self, "Guardar Archivo con Volumen Amplificado", f"{base}_amplificado{ext}", f"Archivo ({ext})"
+            self, "Guardar Archivo con Volumen Amplificado", f"{base}_amplificado{ext}", f"Archivo (*{ext})"
         )
         if not output_path:
             return
 
         self.btn_boost.setEnabled(False)
+        self.btn_play_preview.setEnabled(False)
         self.drop_zone.setEnabled(False)
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(15)
 
-        mult = self.slider.value() / 100.0
-        norm = self.chk_norm.isChecked()
+        multiplier = self.slider.value() / 100.0
+        normalize = self.chk_norm.isChecked()
 
-        self.worker = AudioBoostThread(self.file_path, output_path, mult, norm)
+        self.worker = AudioBoostThread(
+            self.file_path, output_path, multiplier, normalize
+        )
         self.worker.progress.connect(self._on_progress)
         self.worker.finished_success.connect(self._on_success)
         self.worker.error.connect(self._on_error)
@@ -314,17 +408,23 @@ class AudioBoosterUI(QWidget):
 
     def _on_success(self, output_path):
         self.btn_boost.setEnabled(True)
+        self.btn_play_preview.setEnabled(True)
         self.drop_zone.setEnabled(True)
         self.progress_bar.setVisible(False)
-        self.status_label.setText("Archivo amplificado guardado con éxito")
+        self.status_label.setText("Audio amplificado guardado con éxito")
         QMessageBox.information(
-            self, "Volumen Amplificado",
+            self, "Proceso Completado",
             f"El archivo se procesó correctamente:\n\n{output_path}"
         )
 
     def _on_error(self, err):
         self.btn_boost.setEnabled(True)
+        self.btn_play_preview.setEnabled(True)
         self.drop_zone.setEnabled(True)
         self.progress_bar.setVisible(False)
-        self.status_label.setText("Error al procesar")
-        QMessageBox.critical(self, "Error", f"Ocurrió un error al amplificar el audio:\n{err}")
+        self.status_label.setText("Error al procesar audio")
+        QMessageBox.critical(self, "Error", f"Ocurrió un error al procesar el archivo:\n{err}")
+
+    def closeEvent(self, event):
+        self.player.stop()
+        super().closeEvent(event)

@@ -106,9 +106,9 @@ class GifMakerUI(QWidget):
         self.drop_zone.setFixedHeight(140)
         self.drop_zone.setStyleSheet(f"""
             QFrame {{
-                background-color: {self._colors['bg']};
+                background-color: {self._colors['card']};
                 border: 2px dashed {self._colors['border']};
-                border-radius: 14px;
+                border-radius: 12px;
             }}
             QFrame:hover {{
                 border-color: {self._colors['accent']};
@@ -135,8 +135,16 @@ class GifMakerUI(QWidget):
 
         # Opciones de GIF
         opts_box = QFrame()
-        opts_box.setStyleSheet(f"background-color: {self._colors['bg']}; border-radius: 12px; padding: 12px;")
+        opts_box.setStyleSheet(f"""
+            QFrame {{
+                background-color: {self._colors['card']};
+                border: 1px solid {self._colors['border']};
+                border-radius: 10px;
+                padding: 12px;
+            }}
+        """)
         opts_layout = QVBoxLayout(opts_box)
+        opts_layout.setContentsMargins(12, 10, 12, 10)
         opts_layout.setSpacing(12)
 
         lbl_opts = QLabel("Ajustes del GIF:")

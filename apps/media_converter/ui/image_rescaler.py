@@ -106,9 +106,12 @@ class ImageRescaler(QWidget):
 
         # Configuraciones de Reescalado
         config_layout = QVBoxLayout()
+        config_layout.setContentsMargins(6, 6, 6, 6)
+        config_layout.setSpacing(10)
         
         # Modo: Pixeles o Porcentaje
         mode_layout = QHBoxLayout()
+        mode_layout.setSpacing(12)
         self.mode_group = QButtonGroup(self)
         self.radio_pixels = QRadioButton("Por Píxeles")
         self.radio_pixels.setChecked(True)
@@ -116,12 +119,15 @@ class ImageRescaler(QWidget):
         self.mode_group.addButton(self.radio_pixels)
         self.mode_group.addButton(self.radio_percentage)
         
-        self.radio_pixels.setStyleSheet(f"color: {self._colors['text_main']};")
-        self.radio_percentage.setStyleSheet(f"color: {self._colors['text_main']};")
+        self.radio_pixels.setStyleSheet(f"color: {self._colors['text_main']}; font-weight: 600;")
+        self.radio_percentage.setStyleSheet(f"color: {self._colors['text_main']}; font-weight: 600;")
         
-        mode_layout.addWidget(QLabel("Modo de Reescalado:"))
+        lbl_mode = QLabel("Modo de Reescalado:")
+        lbl_mode.setStyleSheet(f"color: {self._colors['text_muted']}; font-weight: 600; margin-right: 6px;")
+        mode_layout.addWidget(lbl_mode)
         mode_layout.addWidget(self.radio_pixels)
         mode_layout.addWidget(self.radio_percentage)
+        mode_layout.addStretch()
         config_layout.addLayout(mode_layout)
         
         # Opciones de Pixeles
@@ -361,7 +367,9 @@ class ImageRescaler(QWidget):
                         break
                         
                     nombre = os.path.basename(file_path)
-                    ruta_destino = os.path.join(output_dir, nombre)
+                    base, ext = os.path.splitext(nombre)
+                    nombre_copia = f"{base}_reescalado{ext}"
+                    ruta_destino = os.path.join(output_dir, nombre_copia)
                     
                     resultado = ImageRescalerLogic.reescalar_imagen(
                         ruta_origen=file_path,
@@ -413,8 +421,15 @@ class ImageRescaler(QWidget):
             QMessageBox.warning(self, "Advertencia", "Por favor selecciona una imagen primero.")
             return
 
-        nombre = os.path.basename(self.image_path)
-        ruta_destino = os.path.join(output_dir, nombre)
+        base, ext = os.path.splitext(self.image_path)
+        default_name = f"{base}_reescalado{ext}"
+        filtro = f"Imagen (*{ext})" if ext else "Todas las imágenes (*.*)"
+        ruta_destino, _ = QFileDialog.getSaveFileName(
+            self, "Guardar Copia Reescalada", default_name, filtro
+        )
+        if not ruta_destino:
+            return
+        output_dir = os.path.dirname(ruta_destino)
 
         from core.ui.advanced_progress import AdvancedProgressDialog
         progress = AdvancedProgressDialog("Reescalando imagen...", 1, self)

@@ -117,16 +117,24 @@ class AudioConverter(QWidget):
         card_layout.addWidget(self.file_label)
 
         combo_layout = QHBoxLayout()
+        combo_layout.setContentsMargins(6, 6, 6, 6)
+        combo_layout.setSpacing(14)
         self.from_combo = QComboBox()
         self.from_combo.addItems(AUDIO_FORMATS)
         self.from_combo.setEnabled(False)
-        combo_layout.addWidget(QLabel("Formato de origen:"))
+        lbl_from = QLabel("Formato de origen:")
+        lbl_from.setStyleSheet(f"color: {self._colors['text_muted']}; font-weight: 600; margin-right: 6px;")
+        combo_layout.addWidget(lbl_from)
         combo_layout.addWidget(self.from_combo)
+        combo_layout.addSpacing(15)
 
         self.to_combo = QComboBox()
         self.to_combo.addItems(AUDIO_FORMATS)
-        combo_layout.addWidget(QLabel("Formato de destino:"))
+        lbl_to = QLabel("Formato de destino:")
+        lbl_to.setStyleSheet(f"color: {self._colors['text_muted']}; font-weight: 600; margin-right: 6px;")
+        combo_layout.addWidget(lbl_to)
         combo_layout.addWidget(self.to_combo)
+        combo_layout.addStretch()
 
         card_layout.addLayout(combo_layout)
 
